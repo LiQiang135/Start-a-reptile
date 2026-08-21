@@ -1,0 +1,141 @@
+"""Wayback Machine fallback crawler for sites that block direct access."""
+import re
+from urllib.parse import urljoin, quote
+
+from base import (
+    fetch_html, parse_soup, extract_text,
+    save_article, is_scraped, polite_sleep,
+)
+from config import SITES
+
+
+def get_wayback_url(original_url):
+    """Get latest Wayback Machine snapshot URL for a given URL."""
+    api_url = f"http://archive.org/wayback/available?url={quote(original_url)}"
+    try:
+        import requests
+        r = requests.get(api_url, timeout=30, headers={"User-Agent": "Mozilla/5.0"})
+        data = r.json()
+        closest = data.get("archived_snapshots", {}).get("closest", {})
+        if closest and closest.get("available"):
+            return closest.get("url", "")
+    except Exception as e:
+        print(f"  [wayback] API error: {e}")
+    return ""
+
+
+def wayback_url_to_original(wayback_url):
+    """Extract original URL from a Wayback Machine URL.
+    e.g. http://web.archive.org/web/20251219233236/http://www.dalailamaworld.com/news/123
+    -> http://www.dalailamaworld.com/news/123
+    """
+    # Pattern: https://web.archive.org/web/TIMESTAMP/http(s)://original_url
+    match = re.match(r"https?://web\.archive\.org/web/\d+/(https?://.+)", wayback_url)
+    if match:
+        return match.group(1)
+    return wayback_url
+
+
+def make_wayback_snapshot_url(original_url, timestamp=""):
+    """Create a Wayback Machine snapshot URL for a given original URL."""
+    if timestamp:
+        return f"https://web.archive.org/web/{timestamp}/{original_url}"
+    return f"https://web.archive.org/web/{original_url}"
+
+
+def crawl_site(site_key, max_articles=50):
+    cfg = SITES[site_key]
+    base_url = cfg["base_url"]
+    delay = cfg.get("delay", 3.0)
+    print(f"[{site_key}] Starting Wayback Machine crawl of {base_url}")
+
+    # Step 1: Get the latest Wayback snapshot of the homepage
+    homepage_wb = get_wayback_url(base_url)
+    if not homepage_wb:
+        print(f"[{site_key}] No Wayback Machine snapshot available for {base_url}")
+        return 0
+
+    print(f"[{site_key}] Using Wayback snapshot: {homepage_wb}")
+
+    # Extract the timestamp from the snapshot URL
+    ts_match = re.search(r"/web/(\d+)/", homepage_wb)
+    timestamp = ts_match.group(1) if ts_match else ""
+
+    count = 0
+
+    # Step 2: Fetch the archived homepage and discover article links
+    try:
+        html = fetch_html(homepage_wb, timeout=30)
+    except Exception as e:
+        print(f"[{site_key}] Error fetching Wayback snapshot: {e}")
+        return 0
+
+    soup = parse_soup(html)
+
+    # Collect all links
+    article_links = set()
+    for a in soup.find_all("a", href=True):
+        href = a["href"]
+        # Wayback rewrites URLs to include the timestamp
+        # Pattern: /web/TIMESTAMP/http://original_url
+        # Also handles relative URLs
+        if "web.archive.org" in href:
+            original = wayback_url_to_original(href)
+        else:
+            original = href
+
+        # Filter for article-like URLs
+        if re.search(r"/(news|article|detail|post|content|blog)/", original, re.I):
+            article_links.add(original)
+        elif re.search(r"\.(html?|php)$", original, re.I) and re.search(r"\d{4}", original):
+            article_links.add(original)
+        elif re.search(r"\d{4}/\d{2}/", original):
+            article_links.add(original)
+
+    article_links = list(article_links)[:max_articles + 20]
+    print(f"[{site_key}] Found {len(article_links)} candidate links")
+
+    # Step 3: Fetch each article via Wayback Machine
+    for original_url in article_links:
+        if is_scraped(original_url) or count >= max_articles:
+            continue
+
+        # Use Wayback to fetch the article
+        wb_url = make_wayback_snapshot_url(original_url, timestamp) if timestamp else get_wayback_url(original_url)
+        try:
+            polite_sleep(delay)
+            html = fetch_html(wb_url, timeout=30)
+            soup = parse_soup(html)
+
+            # Remove Wayback Machine toolbar elements
+            for tag in soup.find_all(id=re.compile(r"wm-|wayback")):
+                tag.decompose()
+            for tag in soup.find_all(class_=re.compile(r"wm-|wayback")):
+                tag.decompose()
+
+            title_el = soup.find("h1") or soup.find("title")
+            title = title_el.get_text(strip=True) if title_el else ""
+
+            date_el = soup.find("time") or soup.find(attrs={"class": re.compile(r"date|time", re.I)})
+            published = ""
+            if date_el:
+                published = date_el.get("datetime", "") if date_el.has_attr("datetime") else date_el.get_text(strip=True)
+
+            author_el = soup.find(attrs={"class": re.compile(r"author|byline", re.I)})
+            author = author_el.get_text(strip=True) if author_el else ""
+
+            content = extract_text(soup, cfg.get("content_selectors", []))
+            if len(content) < 50:
+                continue
+
+            save_article(
+                site=site_key, url=original_url, title=title, author=author,
+                published=published, content=content, raw_html="",
+            )
+            count += 1
+            print(f"[{site_key}] Saved ({count}): {title[:60]}")
+        except Exception as e:
+            print(f"[{site_key}] Error scraping {original_url}: {e}")
+
+    print(f"[{site_key}] Total saved: {count}")
+    return count
