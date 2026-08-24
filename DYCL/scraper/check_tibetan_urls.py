@@ -7,4 +7,4 @@ SITES = [
  "http://xizang-zhiye.org","https://www.vot.org","https://tibetanparliament.org",
  "http://www.tibetexpress.net","https://studentsforefreetibet.org","https://www.savetibet.org",
  "https://www.tibetsun.com","http://www.freetibet.org","https://www.tibetanreview.net",
- "https://tibettruth.com","http://tibet.net","
+ "https://tibettruth.com","http://tibet.net"]

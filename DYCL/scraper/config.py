@@ -14,4 +14,6 @@ SITES = {
     "tibetnet": {"name": "Tibet.net", "base_url": "https://tibet.net", "feed_url": "https://tibet.net/feed/", "strategy": "rss", "delay": 3.0, "content_selectors": [".entry-content", "article"]},
     "tibetanparliament": {"name": "Tibetan Parliament", "base_url": "https://tibetanparliament.org", "strategy": "wayback", "delay": 3.0, "content_selectors": [".entry-content", "article"]},
     "tibetexpress": {"name": "Tibet Express", "base_url": "http://www.tibetexpress.net", "strategy": "wayback", "delay": 3.0, "content_selectors": [".entry-content", "article"]},
-    "sft": {"name": "Students for Free Tibet", "base_url": "https://students
+}
+
+    # "sft": {"name": "Students for Free Tibet", "base_url": "https://students"},
