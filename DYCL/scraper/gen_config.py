@@ -22,13 +22,13 @@ S = [
     ("sfft", "Students for Afree Tibetan", "https://studentsforafreetibet.org", "rss", 2.0,
      "https://studentsforafreetibet.org/feed"),
     ("savetibet", "Save Tibetan", "https://www.savetibet.org", "rss", 2.0, "https://www.savetibet.org/feed"),
-    ("","","https://www.tibetsun.com",)
+    ("freetibet","Free Tibet","https://freetibet.org","html",2.0,None)
 ]
 
 # 为不同策略配置默认的 content_selectors
 DEFAULT_SELECTORS = {
     "rss": [".entry-content", "article"],
-    "html": ["article", ".post-content", ".entry-content", ".content"],
+    "html": [".article-content-main", "article"],
     "wayback": ["#content", ".content", ".entry-content", "article"],
     "playwright": [".entry-content", "article", ".content"],
 }

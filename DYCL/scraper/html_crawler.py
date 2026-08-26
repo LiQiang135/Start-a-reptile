@@ -1,34 +1,64 @@
-"""HTML page crawler for sites without RSS feeds (dalailamaworld, xizangzhiye)."""
+"""HTML page crawler for sites without RSS feeds (dalailamaworld, xizangzhiye, freetibet)."""
 import re
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 from base import fetch_html, parse_soup, extract_text, save_article, is_scraped, polite_sleep
 from config import SITES
 
 # Common link patterns for article links
 ARTICLE_PATTERNS = [
+    re.compile(r"/latest/", re.I),          # ← 新增：Free Tibet 主要路径
     re.compile(r"/article/", re.I),
     re.compile(r"/news/", re.I),
     re.compile(r"/post/", re.I),
-    re.compile(r"/\d{4}/\d{2}/", re.I),  # /2024/01/ date-style URLs
+    re.compile(r"/\d{4}/\d{2}/", re.I),     # /2024/01/ date-style URLs
     re.compile(r"\.(html?|php)$", re.I),
     re.compile(r"/detail/", re.I),
     re.compile(r"/content/", re.I),
 ]
 
 
-def is_article_link(href):
-    return any(p.search(href) for p in ARTICLE_PATTERNS)
+def is_article_link(href, base_url=None):
+    if not href:
+        return False
 
+    href_lower = href.lower()
+
+    # 1. 排除带筛选参数的页面（最常见漏网情况）
+    if "filter_" in href_lower or "filter_submit" in href_lower:
+        return False
+
+    # 2. 排除纯列表页（各种写法）
+    # 匹配以 /latest 或 /latest/ 结尾，且后面没有文章别名
+    if re.search(r"/latest/?$", href_lower):
+        return False
+    if re.search(r"/news/?$", href_lower):
+        return False
+
+    # 3. 排除明显的分页、分类、标签等
+    if re.search(r"/(page|tag|category|author|search)/", href_lower):
+        return False
+
+    # 4. 正常文章规则匹配
+    return any(p.search(href) for p in ARTICLE_PATTERNS)
 
 def discover_links(base_url, max_links=100):
     """Crawl homepage and common section pages to discover article links."""
     urls_to_check = [base_url]
-    # Try common news listing pages
-    for path in ["/news", "/articles", "/category/news", "/news.html",
-                 "/index.php/news", "/index.php/articles"]:
+
+    for path in [
+        "/latest",
+        "/news",
+        "/articles",
+        "/category/news",
+        "/news.html",
+        "/index.php/news",
+        "/index.php/articles",
+    ]:
         urls_to_check.append(urljoin(base_url, path))
+
     discovered = set()
+
     for page_url in urls_to_check:
         try:
             html = fetch_html(page_url)
@@ -36,14 +66,29 @@ def discover_links(base_url, max_links=100):
         except Exception as e:
             print(f"  [discover] Error fetching {page_url}: {e}")
             continue
+
         for a in soup.find_all("a", href=True):
-            href = a["href"]
-            full_url = urljoin(base_url, href)
-            if full_url.startswith(base_url) and is_article_link(full_url):
+            href = a["href"].strip()
+            full_url = urljoin(base_url, href).split("#")[0].split("?")[0]  # 去掉锚点和参数
+
+            # 必须是本站
+            if not full_url.startswith(base_url):
+                continue
+
+            # 再次强制排除纯列表页
+            path = urlparse(full_url).path.rstrip("/")
+            if path in ("", "/latest", "/news", "/articles"):
+                continue
+
+            # 最终判断
+            if is_article_link(full_url):
                 discovered.add(full_url)
+
         if len(discovered) >= max_links:
             break
+
         polite_sleep(1.0)
+
     return list(discovered)[:max_links]
 
 
