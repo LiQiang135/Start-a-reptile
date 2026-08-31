@@ -1,7 +1,7 @@
 """RSS feed crawler for WordPress-based sites (phayul, tibetpost)."""
 import re
 import warnings
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse, parse_qs, urlencode, urlunparse
 from bs4 import BeautifulSoup
 from bs4 import XMLParsedAsHTMLWarning
 
@@ -55,54 +55,101 @@ def parse_feed(feed_url):
             items.append(e)
     return items
 
-def crawl_site(site_key, max_articles=50):
+
+def build_paged_url(feed_url, page):
+    """给 WordPress RSS 地址加上 ?paged=N 参数"""
+    if page <= 1:
+        return feed_url
+    parsed = urlparse(feed_url)
+    qs = parse_qs(parsed.query)
+    qs["paged"] = [str(page)]
+    new_query = urlencode(qs, doseq=True)
+    return urlunparse(parsed._replace(query=new_query))
+
+
+def crawl_site(site_key, max_articles=50, max_pages=20):
+    """
+    抓取站点 RSS，支持 WordPress 的 ?paged= 翻页。
+
+    :param max_articles: 本站最多保存多少篇（对应配置里的上限）
+    :param max_pages:    最多翻多少页，防止无限循环
+    """
     cfg = SITES[site_key]
-    print(f"[{site_key}] Fetching feed: {cfg['feed_url']}")
-    try:
-        items = parse_feed(cfg["feed_url"])
-    except Exception as e:
-        print(f"[{site_key}] Error fetching feed: {e}")
-        return 0
-
-    print(f"[{site_key}] Found {len(items)} feed items")
+    feed_url = cfg["feed_url"]
     selectors = cfg.get("content_selectors", [])
-    count = 0
+    delay = cfg.get("delay", 2.0)
 
-    for item in items:
-        url = item.get("link", "")
-        if not url or is_scraped(url):
-            continue
-        if count >= max_articles:
+    print(f"[{site_key}] 开始抓取，目标最多 {max_articles} 篇，最多翻 {max_pages} 页")
+    count = 0
+    page = 1
+    seen_urls = set()          # 防止同一篇文章在不同页重复出现
+
+    while count < max_articles and page <= max_pages:
+        current_url = build_paged_url(feed_url, page)
+        print(f"[{site_key}] 正在获取第 {page} 页: {current_url}")
+
+        try:
+            items = parse_feed(current_url)
+        except Exception as e:
+            print(f"[{site_key}] 第 {page} 页获取失败: {e}")
             break
 
-        content = ""
-        try:
-            full = item.get("full_content", "")
-            if full and len(full) > 200:
-                # 优先使用 RSS 自带的全文
-                content_soup = parse_soup(full)
-                content = extract_text(content_soup, selectors)
-            else:
-                # 否则去抓取文章页面
-                polite_sleep(cfg.get("delay", 2.0))
-                html = fetch_html(url)
-                soup = parse_soup(html)
-                content = extract_text(soup, selectors)
-        except Exception as e:
-            print(f"[{site_key}] Error extracting content for {url}: {e}")
-            content = item.get("summary", "")
+        if not items:
+            print(f"[{site_key}] 第 {page} 页没有条目，停止翻页")
+            break
 
-        save_article(
-            site=site_key,
-            url=url,
-            title=item.get("title", ""),
-            author=item.get("author", ""),
-            published=item.get("published", ""),
-            content=content,
-            summary=item.get("summary", ""),
-        )
-        count += 1
-        print(f"[{site_key}] Saved ({count}): {item.get('title', '')[:60]}")
+        print(f"[{site_key}] 第 {page} 页找到 {len(items)} 条")
 
-    print(f"[{site_key}] Total saved: {count}")
+        new_in_this_page = 0
+        for item in items:
+            url = item.get("link", "").strip()
+            if not url or url in seen_urls or is_scraped(url):
+                continue
+
+            seen_urls.add(url)
+
+            if count >= max_articles:
+                break
+
+            content = ""
+            try:
+                full = item.get("full_content", "")
+                if full and len(full) > 200:
+                    # 优先使用 RSS 自带的全文
+                    content_soup = parse_soup(full)
+                    content = extract_text(content_soup, selectors)
+                else:
+                    # 否则去抓取文章页面
+                    polite_sleep(delay)
+                    html = fetch_html(url)
+                    soup = parse_soup(html)
+                    content = extract_text(soup, selectors)
+            except Exception as e:
+                print(f"[{site_key}] 提取内容失败 {url}: {e}")
+                content = item.get("summary", "")
+
+            save_article(
+                site=site_key,
+                url=url,
+                title=item.get("title", ""),
+                author=item.get("author", ""),
+                published=item.get("published", ""),
+                content=content,
+                summary=item.get("summary", ""),
+            )
+            count += 1
+            new_in_this_page += 1
+            print(f"[{site_key}] 已保存 ({count}/{max_articles}): {item.get('title', '')[:60]}")
+
+        # 如果这一页完全没有新文章，说明后面也没必要再翻了
+        if new_in_this_page == 0:
+            print(f"[{site_key}] 第 {page} 页没有新文章，停止翻页")
+            break
+
+        page += 1
+        # 翻页之间也稍微休息一下，更礼貌
+        if page <= max_pages and count < max_articles:
+            polite_sleep(delay)
+
+    print(f"[{site_key}] 完成，共保存 {count} 篇")
     return count
