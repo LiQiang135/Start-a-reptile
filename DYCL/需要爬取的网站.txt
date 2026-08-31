@@ -20,10 +20,10 @@ http://mwa.tibet.net/cn/
 http://tibetoffice.com.au/
 http://tibetoffice.org/
 https://sherig.org/
-https://sambhota.org/
-https://trimzin.net/
+https://sambhota.org/   教育网站
+https://trimzin.net/    法院网站
 https://www.indiatibet.net/
-http://www.savetibet.ru/
+http://www.savetibet.ru/    实际跳转https://nalanda.news/,rss爬取内容为俄语
 https://www.tibethouse.jp/
 https://tibetbureau.in/
 www.officeoftibet.com

@@ -4,25 +4,36 @@
 import json
 from datetime import datetime
 
-# 源数据：每个元组 = (site_key, site_name, base_url, strategy, delay, feed_url)
+# 源数据：每个元组 = (site_key, site_name, base_url, strategy, delay, feed_url, custom_selectors)
+# custom_selectors 为 None 时默认使用 DEFAULT_SELECTORS，否则传入列表覆盖
 S = [
-    ("phayul_bo", "Phayul Tibetan", "https://phayul.com/bo/", "rss", 2.0, "https://phayul.com/bo/feed/"),
-    ("phayul", "Phayul", "https://phayul.com", "rss", 2.0, "https://phayul.com/feed/"),
-    ("tibetpost_bo", "Tibet Post Tibetan", "https://www.thetibetpost.com/bo", "html", 2.0, None),
-    ("tibetpost", "Tibet Post", "https://www.thetibetpost.com", "html", 2.0, None),
-    ("dalailamaworld", "Dalai Lama World", "http://www.dalailamaworld.com", "wayback", 3.0, None),
-    ("xizangzhiye_bo", "Xizang Zhiye Tibetan", "https://xizang-zhiye.org/bo/", "wayback", 3.0, None),
-    ("xizangzhiye", "Xizang Zhiye", "https://xizang-zhiye.org", "wayback", 3.0, None),
-    ("vot_bo", "VOT Tibetan", "https://www.vot.org/", "playwright", 3.0, None),
-    ("vot", "VOT Chinese", "https://www.vot.org/cn/", "playwright", 3.0, None),
-    ("tibetnet_bo", "Tibet.net Tibetan", "https://tibet.net/bo/", "rss", 3.0, "https://tibet.net/bo/feed/"),
-    ("tibetnet", "Tibet.net", "https://tibet.net", "rss", 3.0, "https://tibet.net/feed/"),
-    ("tibetanparliament", "Tibetan Parliament", "https://tibetanparliament.org", "wayback", 3.0, None),
-    ("tibetexpress", "Tibet Express", "http://www.tibetexpress.net", "wayback", 3.0, None),
-    ("sfft", "Students for Afree Tibetan", "https://studentsforafreetibet.org", "rss", 2.0,
-     "https://studentsforafreetibet.org/feed"),
-    ("savetibet", "Save Tibetan", "https://www.savetibet.org", "rss", 2.0, "https://www.savetibet.org/feed"),
-    ("freetibet","Free Tibet","https://freetibet.org","html",2.0,None)
+    ("phayul_bo", "Phayul Tibetan", "https://phayul.com/bo/", "rss", 2.0, "https://phayul.com/bo/feed/", None),
+    ("phayul", "Phayul", "https://phayul.com", "rss", 2.0, "https://phayul.com/feed/", None),
+    ("tibetpost_bo", "Tibet Post Tibetan", "https://www.thetibetpost.com/bo", "html", 2.0, None, [".article-content-main", "article"]),
+    ("tibetpost", "Tibet Post", "https://www.thetibetpost.com", "html", 2.0, None, [".article-content-main", "article"]),
+    ("dalailamaworld", "Dalai Lama World", "http://www.dalailamaworld.com", "wayback", 3.0, None, ["#content", ".content"]),
+    ("xizangzhiye_bo", "Xizang Zhiye Tibetan", "https://xizang-zhiye.org/bo/", "wayback", 3.0, None,None),
+    ("xizangzhiye", "Xizang Zhiye", "https://xizang-zhiye.org", "wayback", 3.0, None,None),
+    ("vot_bo", "VOT Tibetan", "https://www.vot.org/", "playwright", 3.0, None,None),
+    ("vot", "VOT Chinese", "https://www.vot.org/cn/", "playwright", 3.0, None,None),
+    ("tibetnet_bo", "Tibet.net Tibetan", "https://tibet.net/bo/", "rss", 3.0, "https://tibet.net/bo/feed/", None),
+    ("tibetnet", "Tibet.net", "https://tibet.net", "rss", 3.0, "https://tibet.net/feed/", None),
+    ("tibetanparliament", "Tibetan Parliament", "https://tibetanparliament.org", "wayback", 3.0, None,None),
+    ("tibetexpress", "Tibet Express", "http://www.tibetexpress.net", "wayback", 3.0, None,None),
+    ("sfft", "Students for Afree Tibetan", "https://studentsforafreetibet.org", "rss", 2.0, "https://studentsforafreetibet.org/feed",None),
+    ("savetibet", "Save Tibetan", "https://www.savetibet.org", "rss", 2.0, "https://www.savetibet.org/feed", None),
+    ("freetibet", "Free Tibet", "https://freetibet.org", "html", 2.0, None,None),
+    ("tibetreview", "Tibetan Review", "https://www.tibetanreview.net", "rss", 2.0, "https://www.tibetanreview.net/feed", [".td-post-content",".tdb_single_content"]),
+    ("tibettruth", "Tibetan Truth", "https://tibettruth.com", "rss", 2.0, "https://tibettruth.com/feed", None),
+    ("tchrd","Tibetan Centre for Human Rights and Democracy","http://tchrd.org","rss",2.0,"http://tchrd.org/feed", [".td-post-content",".tdb_single_content"]),
+    ("tibetinformation","Tibetan Information Office","http://tibetoffice.com.au","rss",2.0,"http://tibetoffice.com.au/feed",[".main-content",".entry-content"]),
+    ("tibetoffice","The office of Tibetan","http://tibetoffice.org","rss",2.0,"http://tibetoffice.org/feed",[".entry",".post-inner"]),
+    ("sherig","Department of education","https://sherig.org","rss",2.0,"https://sherig.org/?feed=rss2",[".w-post-elm.post_content",".post_content"]),
+    ("indiatibet","India Tibet Coordination office","https://www.indiatibet.net","rss",2.0,"https://www.indiatibet.net/feed",None),
+    ("nalanda","Buddhist News Nalanda","https://nalanda.news/","rss",2.0,"https://nalanda.news/rssdzen.xml",None),
+    ("tibethouse_jp","Tibet House Japan","https://www.tibethouse.jp/","rss",2.0,"https://www.tibethouse.jp/feed",None),
+    ("tibetbureau","Bureau of His Holiness The Dalai Lama","https://tibetbureau.in/","rss",2.0,"https://tibetbureau.in/feed",None),
+    ("officeoftibet","Office of Tibet Pretoria","https://officeoftibet.com/","rss",2.0,"https://officeoftibet.com/feed",['.entry-content',]),
 ]
 
 # 为不同策略配置默认的 content_selectors
@@ -33,20 +44,21 @@ DEFAULT_SELECTORS = {
     "playwright": [".entry-content", "article", ".content"],
 }
 
-# 特定站点的定制选择器（覆盖默认值）
-CUSTOM_SELECTORS = {
-    "tibetpost_bo": [".article-content-main", "article"],
-    "tibetpost": [".article-content-main", "article"],
-    "dalailamaworld": ["#content", ".content"],
-}
-
 
 def generate_config():
     """生成 config.py 文件"""
-
     sites = {}
 
-    for key, name, base_url, strategy, delay, feed_url in S:
+    for item in S:
+        # 兼容 6 个或 7 个参数的情况
+        if len(item) == 7:
+            key, name, base_url, strategy, delay, feed_url, custom_selectors = item
+        elif len(item) == 6:
+            key, name, base_url, strategy, delay, feed_url = item
+            custom_selectors = None
+        else:
+            raise ValueError(f"Invalid tuple length in S: {item}")
+
         # 基础配置
         site_config = {
             "name": name,
@@ -59,13 +71,13 @@ def generate_config():
         if strategy == "rss" and feed_url:
             site_config["feed_url"] = feed_url
 
-        # 添加 content_selectors
-        if key in CUSTOM_SELECTORS:
-            site_config["content_selectors"] = CUSTOM_SELECTORS[key]
-        elif strategy in DEFAULT_SELECTORS:
-            site_config["content_selectors"] = DEFAULT_SELECTORS[strategy]
+        # 确定 content_selectors 优先级：自定义 -> 策略默认 -> 通用兜底
+        if custom_selectors:
+            site_config["content_selectors"] = custom_selectors
         else:
-            site_config["content_selectors"] = ["article", ".content"]
+            site_config["content_selectors"] = DEFAULT_SELECTORS.get(
+                strategy, [".entry-content", "article", ".content"]
+            )
 
         sites[key] = site_config
 
@@ -76,18 +88,15 @@ def generate_config():
         "max_articles_per_site": 500,
     }
 
-    # 写入 config.py
     with open("config.py", "w", encoding="utf-8") as f:
         f.write('#!/usr/bin/env python3\n')
         f.write('"""Configuration for all sites. Auto-generated by gen_config.py"""\n')
         f.write(f'# Generated: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}\n\n')
 
-        # 写入 BASE_SETTINGS
         f.write("BASE_SETTINGS = ")
         f.write(json.dumps(base_settings, ensure_ascii=False, indent=2))
         f.write("\n\n")
 
-        # 写入 SITES：每个 site 配置单独占一行
         f.write("SITES = {\n")
         for k, v in sites.items():
             f.write(f'  "{k}": {json.dumps(v, ensure_ascii=False)},\n')
