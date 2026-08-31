@@ -33,7 +33,9 @@ S = [
     ("nalanda","Buddhist News Nalanda","https://nalanda.news/","rss",2.0,"https://nalanda.news/rssdzen.xml",None),
     ("tibethouse_jp","Tibet House Japan","https://www.tibethouse.jp/","rss",2.0,"https://www.tibethouse.jp/feed",None),
     ("tibetbureau","Bureau of His Holiness The Dalai Lama","https://tibetbureau.in/","rss",2.0,"https://tibetbureau.in/feed",None),
-    ("officeoftibet","Office of Tibet Pretoria","https://officeoftibet.com/","rss",2.0,"https://officeoftibet.com/feed",['.entry-content',]),
+    ("officeoftibet","Office of Tibet Pretoria","https://officeoftibet.com/","rss",2.0,"https://officeoftibet.com/feed",[".article-contents","article"]),
+    ("tibetinf_au","Tibetan Information Office,Australia","http://tibetoffice.com.au/","rss",2.0,"http://tibetoffice.com.au/feed",None),
+    ("tibetgeneva","The Tibet Bureau Geneva","https://www.tibetoffice.ch/","rss",2.0,"https://www.tibetoffice.ch/feed",None),
 ]
 
 # 为不同策略配置默认的 content_selectors

@@ -55,7 +55,6 @@ def parse_feed(feed_url):
             items.append(e)
     return items
 
-
 def crawl_site(site_key, max_articles=50):
     cfg = SITES[site_key]
     print(f"[{site_key}] Fetching feed: {cfg['feed_url']}")
@@ -64,30 +63,35 @@ def crawl_site(site_key, max_articles=50):
     except Exception as e:
         print(f"[{site_key}] Error fetching feed: {e}")
         return 0
+
     print(f"[{site_key}] Found {len(items)} feed items")
     selectors = cfg.get("content_selectors", [])
     count = 0
+
     for item in items:
         url = item.get("link", "")
         if not url or is_scraped(url):
             continue
         if count >= max_articles:
             break
-        # If feed already has full content, use it
-        full = item.get("full_content", "")
-        if full and len(full) > 200:
-            content_soup = parse_soup(full)
-            content = extract_text(content_soup, selectors)
-        else:
-            # Fetch article page for full content
-            try:
+
+        content = ""
+        try:
+            full = item.get("full_content", "")
+            if full and len(full) > 200:
+                # 优先使用 RSS 自带的全文
+                content_soup = parse_soup(full)
+                content = extract_text(content_soup, selectors)
+            else:
+                # 否则去抓取文章页面
                 polite_sleep(cfg.get("delay", 2.0))
                 html = fetch_html(url)
                 soup = parse_soup(html)
                 content = extract_text(soup, selectors)
-            except Exception as e:
-                print(f"[{site_key}] Error fetching {url}: {e}")
-                content = item.get("summary", "")
+        except Exception as e:
+            print(f"[{site_key}] Error extracting content for {url}: {e}")
+            content = item.get("summary", "")
+
         save_article(
             site=site_key,
             url=url,
@@ -98,6 +102,7 @@ def crawl_site(site_key, max_articles=50):
             summary=item.get("summary", ""),
         )
         count += 1
-        print(f"[{site_key}] Saved ({count}): {item.get('title','')[:60]}")
+        print(f"[{site_key}] Saved ({count}): {item.get('title', '')[:60]}")
+
     print(f"[{site_key}] Total saved: {count}")
     return count
