@@ -68,12 +68,6 @@ def build_paged_url(feed_url, page):
 
 
 def crawl_site(site_key, max_articles=50, max_pages=20):
-    """
-    抓取站点 RSS，支持 WordPress 的 ?paged= 翻页。
-
-    :param max_articles: 本站最多保存多少篇（对应配置里的上限）
-    :param max_pages:    最多翻多少页，防止无限循环
-    """
     cfg = SITES[site_key]
     feed_url = cfg["feed_url"]
     selectors = cfg.get("content_selectors", [])
@@ -82,7 +76,9 @@ def crawl_site(site_key, max_articles=50, max_pages=20):
     print(f"[{site_key}] 开始抓取，目标最多 {max_articles} 篇，最多翻 {max_pages} 页")
     count = 0
     page = 1
-    seen_urls = set()          # 防止同一篇文章在不同页重复出现
+    seen_urls = set()
+    consecutive_empty_new = 0          # 连续多少页没有新文章
+    max_consecutive_empty = 2          # 连续 2 页都没有新文章就停（可调整）
 
     while count < max_articles and page <= max_pages:
         current_url = build_paged_url(feed_url, page)
@@ -115,11 +111,9 @@ def crawl_site(site_key, max_articles=50, max_pages=20):
             try:
                 full = item.get("full_content", "")
                 if full and len(full) > 200:
-                    # 优先使用 RSS 自带的全文
                     content_soup = parse_soup(full)
                     content = extract_text(content_soup, selectors)
                 else:
-                    # 否则去抓取文章页面
                     polite_sleep(delay)
                     html = fetch_html(url)
                     soup = parse_soup(html)
@@ -141,13 +135,16 @@ def crawl_site(site_key, max_articles=50, max_pages=20):
             new_in_this_page += 1
             print(f"[{site_key}] 已保存 ({count}/{max_articles}): {item.get('title', '')[:60]}")
 
-        # 如果这一页完全没有新文章，说明后面也没必要再翻了
         if new_in_this_page == 0:
-            print(f"[{site_key}] 第 {page} 页没有新文章，停止翻页")
-            break
+            consecutive_empty_new += 1
+            print(f"[{site_key}] 第 {page} 页没有新文章（连续 {consecutive_empty_new} 页）")
+            if consecutive_empty_new >= max_consecutive_empty:
+                print(f"[{site_key}] 连续 {max_consecutive_empty} 页没有新文章，停止翻页")
+                break
+        else:
+            consecutive_empty_new = 0   # 有新文章就重置计数
 
         page += 1
-        # 翻页之间也稍微休息一下，更礼貌
         if page <= max_pages and count < max_articles:
             polite_sleep(delay)
 

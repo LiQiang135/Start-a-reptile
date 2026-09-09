@@ -109,15 +109,57 @@ def crawl_site(site_key, max_articles=50):
             polite_sleep(cfg.get("delay", 2.0))
             html = fetch_html(url)
             soup = parse_soup(html)
-            title_el = soup.find("title") or soup.find("h1")
-            title = title_el.get_text(strip=True) if title_el else ""
-            date_el = soup.find("time") or soup.find(attrs={"class": re.compile(r"date|time", re.I)})
-            published = date_el.get("datetime", "") if date_el and date_el.has_attr("datetime") else (date_el.get_text(strip=True) if date_el else "")
-            author_el = soup.find(attrs={"class": re.compile(r"author|byline", re.I)})
-            author = author_el.get_text(strip=True) if author_el else ""
+
+            # ---------- 标题（优先 h1 → og:title → <title>）----------
+            title = ""
+            h1 = soup.find("h1")
+            if h1 is not None:
+                title = h1.get_text(strip=True)
+            if not title:
+                og_title = soup.find("meta", property="og:title")
+                if og_title is not None:
+                    title = og_title.get("content", "").strip()
+            if not title:
+                title_el = soup.find("title")
+                if title_el is not None:
+                    title = title_el.get_text(strip=True)
+            # 去掉末尾常见的站点后缀
+            for suffix in (" - Free Tibet", " | Free Tibet", " - FreeTibet"):
+                if title.endswith(suffix):
+                    title = title[: -len(suffix)].strip()
+                    break
+
+            # ---------- 发布时间（优先 meta → <time> → class）----------
+            published = ""
+            # 1. 最准确的 meta
+            for prop in ("article:published_time", "og:published_time", "publishdate", "pubdate"):
+                meta = soup.find("meta", property=prop) or soup.find("meta", attrs={"name": prop})
+                if meta is not None and meta.get("content"):
+                    published = meta.get("content").strip()
+                    break
+            # 2. <time> 标签
+            if not published:
+                date_el = soup.find("time")
+                if date_el is not None:
+                    published = date_el.get("datetime") or date_el.get_text(strip=True)
+            # 3. 常见 class
+            if not published:
+                date_el = soup.find(attrs={"class": re.compile(r"date|time|published|post-date", re.I)})
+                if date_el is not None:
+                    published = date_el.get("datetime") or date_el.get_text(strip=True)
+
+            # ---------- 作者 ----------
+            author = ""
+            author_el = soup.find(attrs={"class": re.compile(r"author|byline|writer", re.I)})
+            if author_el is not None:
+                author = author_el.get_text(strip=True)
+
+            # ---------- 正文 ----------
             content = extract_text(soup, selectors)
-            if len(content) < 50:
+            if not content or len(content) < 50:
+                print(f"[{site_key}] Skip (content too short): {url}")
                 continue
+
             save_article(
                 site=site_key,
                 url=url,
@@ -130,6 +172,9 @@ def crawl_site(site_key, max_articles=50):
             count += 1
             print(f"[{site_key}] Saved ({count}): {title[:60]}")
         except Exception as e:
+            import traceback
             print(f"[{site_key}] Error scraping {url}: {e}")
+            traceback.print_exc()
+
     print(f"[{site_key}] Total saved: {count}")
     return count

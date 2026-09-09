@@ -139,7 +139,11 @@ def extract_text(soup, selectors=None):
 
     Filters out navigation menus, sidebars, widgets, related posts, ads, and
     other non-article elements that may appear inside the selected container.
+    Always returns a string (never None).
     """
+    if soup is None:
+        return ""
+
     # Tags and class/id patterns to remove as noise
     NOISE_TAGS = [
         "script", "style", "nav", "footer", "header", "aside", "form",
@@ -158,42 +162,68 @@ def extract_text(soup, selectors=None):
 
     def _strip_noise(container):
         """Remove noise tags and elements with noise class/id from container."""
-        # Remove noise tags
+        if container is None:
+            return
+
+        # 1. 删除噪声标签
         for tag in container.find_all(NOISE_TAGS):
             tag.decompose()
-        # Remove elements with noise class patterns
-        for el in container.find_all(attrs={"class": True}):
-            classes = " ".join(el.get("class", []))
-            if any(pat.search(classes) for pat in NOISE_CLASS_PATTERNS):
-                el.decompose()
-        # Remove elements with noise id patterns
-        for el in container.find_all(attrs={"id": True}):
-            el_id = el.get("id", "")
-            if any(pat.search(el_id) for pat in NOISE_ID_PATTERNS):
-                el.decompose()
-        # Remove empty divs (cleanup)
-        for div in container.find_all("div"):
-            if not div.get_text(strip=True) and not div.find(["img", "video", "audio"]):
-                div.decompose()
 
+        # 2. 收集并删除带噪声 class 的元素
+        to_remove = []
+        for el in container.find_all(attrs={"class": True}):
+            if el is None:
+                continue
+            classes = " ".join(el.get("class", []) or [])
+            if any(pat.search(classes) for pat in NOISE_CLASS_PATTERNS):
+                to_remove.append(el)
+        for el in to_remove:
+            el.decompose()
+
+        # 3. 收集并删除带噪声 id 的元素
+        to_remove = []
+        for el in container.find_all(attrs={"id": True}):
+            if el is None:
+                continue
+            el_id = el.get("id", "") or ""
+            if any(pat.search(el_id) for pat in NOISE_ID_PATTERNS):
+                to_remove.append(el)
+        for el in to_remove:
+            el.decompose()
+
+        # 4. 清理空 div
+        to_remove = []
+        for div in container.find_all("div"):
+            if div is None:
+                continue
+            if not div.get_text(strip=True) and not div.find(["img", "video", "audio"]):
+                to_remove.append(div)
+        for div in to_remove:
+            div.decompose()
+
+    # 优先使用配置的选择器
     if selectors:
         for sel in selectors:
             el = soup.select_one(sel)
-            if el:
+            if el is not None:
                 _strip_noise(el)
                 text = el.get_text(separator="\n", strip=True)
                 if len(text) > 50:
                     return text
 
-    # Fallback: collect <p> tags, filtering noise
+    # Fallback: 从 body 提取段落
     body = soup.find("body") or soup
     _strip_noise(body)
     paragraphs = body.find_all("p")
-    text = "\n\n".join(p.get_text(strip=True) for p in paragraphs if len(p.get_text(strip=True)) > 20)
+    text = "\n\n".join(
+        p.get_text(strip=True) for p in paragraphs
+        if p is not None and len(p.get_text(strip=True)) > 20
+    )
     if len(text) > 50:
         return text
-    # Last resort
-    return body.get_text(separator="\n", strip=True)
+
+    # 最后手段
+    return body.get_text(separator="\n", strip=True) or ""
 
 
 def polite_sleep(delay=2.0):

@@ -6,6 +6,7 @@ import os
 import sys
 import json
 import csv
+import html
 
 sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
@@ -29,6 +30,20 @@ def detect_language(content):
     return "other"
 
 
+def clean_and_validate_content(text):
+    """清理 HTML 标签并格式化文本"""
+    if not text:
+        return ""
+    # 1. 移除所有 HTML 标签 (如 <p>, <br>, <div> 等)
+    text = re.sub(r'<[^>]+>', '', text)
+    # 2. 转换 HTML 转义字符 (如 &nbsp; 转换为普通空格, &amp; 转换为 &)
+    text = html.unescape(text)
+    # 3. 将连续的空白字符（包括换行、制表符）替换为单个空格，并去除首尾空白
+    text = re.sub(r'\s+', ' ', text).strip()
+
+    return text
+
+
 def main():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     db = sqlite3.connect(DB_PATH)
@@ -41,7 +56,18 @@ def main():
 
     # Build export data
     articles = []
+    invalid_count = 0  # 记录因为正文为空而被过滤的低质量数据
+
     for row in rows:
+        raw_content = row["content"] or ""
+        # 首先对正文进行 HTML 标签清洗
+        cleaned_content = clean_and_validate_content(raw_content)
+
+        # 质量验证：如果清洗标签后，正文变成了空字符串，说明是无效数据，直接跳过
+        if len(cleaned_content) == 0:
+            invalid_count += 1
+            continue
+
         article = {
             "id": row["id"],
             "site": row["site"],
@@ -49,11 +75,13 @@ def main():
             "title": row["title"],
             "author": row["author"] or "",
             "published": row["published"] or "",
-            "content": row["content"] or "",
-            "language": detect_language(row["content"]),
-            "content_length": len(row["content"] or ""),
+            "content": cleaned_content,  # 存入剥离标签后的干净正文
+            "language": detect_language(cleaned_content),  # 基于干净正文进行语言检测，会准确很多
+            "content_length": len(cleaned_content),
         }
         articles.append(article)
+
+    print(f"数据清洗完毕: 拦截了 {invalid_count} 条无正文/纯标签数据。")
 
     # Export to JSON
     json_path = os.path.join(OUTPUT_DIR, "all_articles.json")
@@ -112,7 +140,7 @@ def main():
     for (site, lang), count in sorted(site_lang.items()):
         print(f"  {site}/{lang}: {count}")
 
-    print(f"\nTotal articles: {len(articles)}")
+    print(f"\nTotal articles exported: {len(articles)}")
 
     db.close()
 
