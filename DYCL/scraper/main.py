@@ -15,6 +15,7 @@ import rss_crawler
 import html_crawler
 import playwright_crawler
 import wayback_crawler
+import html_crawler_bo
 
 
 STRATEGY_MAP = {
@@ -22,6 +23,7 @@ STRATEGY_MAP = {
     "html": html_crawler,
     "playwright": playwright_crawler,
     "wayback": wayback_crawler,
+    "html_bo":html_crawler_bo,
 }
 
 

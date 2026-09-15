@@ -67,7 +67,7 @@ def build_paged_url(feed_url, page):
     return urlunparse(parsed._replace(query=new_query))
 
 
-def crawl_site(site_key, max_articles=50, max_pages=20):
+def crawl_site(site_key, max_articles=50, max_pages=5):
     cfg = SITES[site_key]
     feed_url = cfg["feed_url"]
     selectors = cfg.get("content_selectors", [])
@@ -78,7 +78,7 @@ def crawl_site(site_key, max_articles=50, max_pages=20):
     page = 1
     seen_urls = set()
     consecutive_empty_new = 0          # 连续多少页没有新文章
-    max_consecutive_empty = 2          # 连续 2 页都没有新文章就停（可调整）
+    max_consecutive_empty = 2          # 连续 2 页都没有新文章就停
 
     while count < max_articles and page <= max_pages:
         current_url = build_paged_url(feed_url, page)

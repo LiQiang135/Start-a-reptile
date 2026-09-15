@@ -7,7 +7,7 @@ from config import SITES
 
 # Common link patterns for article links
 ARTICLE_PATTERNS = [
-    re.compile(r"/latest/", re.I),          # ← 新增：Free Tibet 主要路径
+    re.compile(r"/latest/", re.I),          # Free Tibet 主要路径
     re.compile(r"/article/", re.I),
     re.compile(r"/news/", re.I),
     re.compile(r"/post/", re.I),

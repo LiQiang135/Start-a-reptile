@@ -7,27 +7,12 @@ import sys
 import json
 import csv
 import html
+from lang_probe import detect_language
 
 sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "data", "articles.db")
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "data", "export")
-
-
-def detect_language(content):
-    """Detect the primary language of content."""
-    if not content:
-        return "unknown"
-    tib_chars = len(re.findall(r'[\u0f00-\u0fff]', content))
-    chi_chars = len(re.findall(r'[\u4e00-\u9fff]', content))
-    eng_chars = len(re.findall(r'[a-zA-Z]', content))
-    if tib_chars > 50:
-        return "tibetan"
-    if chi_chars > 50:
-        return "chinese"
-    if eng_chars > 200:
-        return "english"
-    return "other"
 
 
 def clean_and_validate_content(text):
@@ -60,10 +45,8 @@ def main():
 
     for row in rows:
         raw_content = row["content"] or ""
-        # 首先对正文进行 HTML 标签清洗
         cleaned_content = clean_and_validate_content(raw_content)
 
-        # 质量验证：如果清洗标签后，正文变成了空字符串，说明是无效数据，直接跳过
         if len(cleaned_content) == 0:
             invalid_count += 1
             continue
@@ -75,8 +58,8 @@ def main():
             "title": row["title"],
             "author": row["author"] or "",
             "published": row["published"] or "",
-            "content": cleaned_content,  # 存入剥离标签后的干净正文
-            "language": detect_language(cleaned_content),  # 基于干净正文进行语言检测，会准确很多
+            "content": cleaned_content,
+            "language": detect_language(cleaned_content),  # 直接调用，返回 chinese/english/tibetan/other
             "content_length": len(cleaned_content),
         }
         articles.append(article)
