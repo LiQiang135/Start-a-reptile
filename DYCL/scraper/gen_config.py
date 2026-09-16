@@ -46,6 +46,7 @@ DEFAULT_SELECTORS = {
     "html": [".article-content-main", "article"],
     "wayback": ["#content", ".content", ".entry-content", "article"],
     "playwright": [".entry-content", "article", ".content"],
+    "html_bo": [".article-content-main", "article"],
 }
 
 

@@ -1,13 +1,9 @@
-"""HTML page crawler for Tibetan language websites and sections.
+"""HTML page crawler tailored for Tibetan CMS websites (e.g., Shambala News).
 
-Targets categories:
-- གསར་འགྱུར། (News)
-- དཔྱད་གླེང༌། (Opinion)
-- ཆེད་བསྒྲིགས། (Special Features)
-- འཕྲོད་བསྟེན། (Health)
-- ཚན་རྩལ། (Tech)
-- བོད་སྐོར། (About Tibet)
-- མང་གཙོ། (Democracy)
+URL Structure:
+- Home:     http://example.com/
+- Category: http://example.com/{分类}/ (e.g., /གསར་འགྱུར།/)
+- Article:  http://example.com/{主分类}/{子分类}/{文章藏文标题}/
 """
 
 import json
@@ -24,44 +20,34 @@ from base import (
 )
 from config import SITES
 
-# 目标藏文分类关键词（去除尾部标点以增强兼容匹配）
+# 目标藏文主分类（统一保留标点）
 TIBETAN_CATEGORIES = [
-    "གསར་འགྱུར",  # 新闻
-    # "དཔྱད་གླེང",  # 评论
-    # "བོད་སྐོར",  # 关于西藏
-    # "མང་གཙོ",  # 民主
+    "གསར་འགྱུར།",  # 新闻
+    # "དཔྱད་གླེང༌།"
+    # "དཔྱད་གླེང༌།",  # 评论
+    # "བོད་སྐོར།",  # 关于西藏
+    # "མང་གཙོ།",  # 民主
 ]
 
-# 藏文分类正则表达式
-TIBETAN_CAT_PATTERN = re.compile(
-    r"/(" + "|".join(re.escape(cat) for cat in TIBETAN_CATEGORIES) + r")", re.I
-)
-
-# 通用文章链接模式
-ARTICLE_PATTERNS = [
-    re.compile(r"/latest/", re.I),
-    re.compile(r"/article/", re.I),
-    re.compile(r"/news/", re.I),
-    re.compile(r"/post/", re.I),
-    re.compile(r"/\d{4}/\d{2}/", re.I),
-    re.compile(r"\.(html?|php)$", re.I),
-    re.compile(r"/detail/", re.I),
-    re.compile(r"/content/", re.I),
-    re.compile(r"[?&](p|id|post_id|article_id)=\d+", re.I),
-]
-
-# 藏文数字映射表
+# ==================== 藏文日期与数字映射 ====================
 TIBETAN_DIGITS = {
-    "༠": "0",
-    "༡": "1",
-    "༢": "2",
-    "༣": "3",
-    "༤": "4",
-    "༥": "5",
-    "༦": "6",
-    "༧": "7",
-    "༨": "8",
-    "༩": "9",
+    "༠": "0", "༡": "1", "༢": "2", "༣": "3", "༤": "4",
+    "༥": "5", "༦": "6", "༧": "7", "༨": "8", "༩": "9",
+}
+
+TIBETAN_MONTHS = {
+    "ཟླ་བ་དང་པོ": "01",
+    "ཟླ་བ་གཉིས་པ": "02",
+    "ཟླ་བ་གསུམ་པ": "03",
+    "ཟླ་བ་བཞི་པ": "04",
+    "ཟླ་བ་ལྔ་པ": "05",
+    "ཟླ་བ་དྲུག་པ": "06",
+    "ཟླ་བ་བདུན་པ": "07",
+    "ཟླ་བ་བརྒྱད་པ": "08",
+    "ཟླ་བ་དགུ་པ": "09",
+    "ཟླ་བ་བཅུ་པ": "10",
+    "ཟླ་བ་བཅུ་གཅིག་པ": "11",
+    "ཟླ་བ་བཅུ་གཉིས་པ": "12",
 }
 
 
@@ -74,61 +60,94 @@ def normalize_tibetan_digits(text: str) -> str:
     return text
 
 
+def parse_tibetan_date(text: str) -> str:
+    """解析纯藏文自然语言日期并规范化为 YYYY-MM-DD，未匹配则返回阿拉伯数字格式文本。"""
+    if not text:
+        return ""
+
+    normalized = normalize_tibetan_digits(text.strip())
+    pattern = re.compile(r"(\d{1,2})\s*(ཟླ་བ་[^\s\d]+)\s*(\d{4})", re.UNICODE)
+    match = pattern.search(normalized)
+    if match:
+        day, raw_month, year = match.groups()
+        month = TIBETAN_MONTHS.get(raw_month.strip("།").strip())
+        if month:
+            return f"{year}-{month}-{day.zfill(2)}"
+
+    return normalized
+
+
+def extract_published_date(soup, ld_meta: dict) -> str:
+    """按设定优先级提取发布日期（优先从 class 容器中捕获）。"""
+    raw_date = ""
+
+    # 1. 第一优先：含 class 属性的元素（先查 published hasTooltip 特征类，再查通用 date/time 类）
+    tooltip_el = soup.find(attrs={"class": lambda c: c and "published" in c and "hasTooltip" in c})
+    if tooltip_el:
+        raw_date = (
+            tooltip_el.get("title")
+            or tooltip_el.get("data-original-title")
+            or tooltip_el.get("datetime")
+            or tooltip_el.get_text(strip=True)
+        )
+
+    if not raw_date:
+        class_el = soup.find(attrs={"class": re.compile(r"date|time|published|post-date", re.I)})
+        if class_el:
+            raw_date = class_el.get("datetime") or class_el.get_text(strip=True)
+
+    # 2. 第二优先：HTML5 <time> 标签
+    if not raw_date:
+        time_el = soup.find("time")
+        if time_el:
+            raw_date = time_el.get("datetime") or time_el.get_text(strip=True)
+
+    # 3. 第三优先：Meta 标签
+    if not raw_date:
+        meta = soup.find("meta", property=re.compile(r"^(article|og):published_time$"))
+        if meta and meta.get("content"):
+            raw_date = meta.get("content").strip()
+
+    # 4. 兜底回退：结构化数据 ld+json
+    if not raw_date:
+        raw_date = ld_meta.get("published", "")
+
+    # 统一出口解析转换
+    return parse_tibetan_date(raw_date)
+
+
 def is_same_domain(url: str, base_url: str) -> bool:
-    """校验链接域名是否一致。"""
+    """通过 netloc 校验域名，规避 URL 编码/未编码导致的字符串前缀不匹配。"""
     return urlparse(url).netloc.lower() == urlparse(base_url).netloc.lower()
 
 
 def is_tibetan_article_link(url: str) -> bool:
-    """判断是否为目标藏文分类下的文章详情页。"""
+    """基于纯路径层级判断是否为藏文详情页。"""
     if not url:
         return False
 
-    # 关键：将 %E0%BD%... 转码为标准藏文字符
     decoded_url = unquote(url)
-    parsed = urlparse(decoded_url)
-    clean_path = parsed.path.rstrip("/")
-    path_and_query = (clean_path + ("?" + parsed.query if parsed.query else "")).lower()
+    clean_path = urlparse(decoded_url).path.strip("/")
+    segments = [seg for seg in clean_path.split("/") if seg]
 
-    # 1. 过滤搜索与筛选参数
-    if any(k in path_and_query for k in ("filter_", "filter_submit", "search=", "s=")):
+    # 过滤分页、标签、作者汇总
+    if any(seg.lower() in ("page", "tag", "author", "search") for seg in segments):
         return False
 
-    # 2. 排除纯分页、标签、作者汇总列表
-    if re.search(r"/(page/\d+|tag/|author/|search/)", clean_path, re.I):
+    # 至少存在主分类与文章两级
+    if len(segments) < 2:
         return False
 
-    # 3. 排除分类首页本身（末尾直接等于分类名）
-    for cat in TIBETAN_CATEGORIES:
-        if clean_path.endswith(f"/{cat}") or clean_path.endswith(f"/{cat}།"):
-            return False
-
-    # 4. 必须包含指定的藏文分类关键词
-    if not TIBETAN_CAT_PATTERN.search(clean_path):
-        return False
-
-    # 5. 校验层级深度（分类层级之后必须还有路径/文章别名）
-    path_segments = [seg for seg in clean_path.split("/") if seg]
-    has_subpath = False
-    for i, seg in enumerate(path_segments):
-        if any(cat in seg for cat in TIBETAN_CATEGORIES) and i < len(path_segments) - 1:
-            has_subpath = True
-            break
-
-    has_article_pattern = any(p.search(decoded_url) for p in ARTICLE_PATTERNS)
-    return has_subpath or has_article_pattern
+    # 根路径命中目标分类
+    first_seg = segments[0].rstrip("།")
+    return any(first_seg == cat.rstrip("།") for cat in TIBETAN_CATEGORIES)
 
 
 def get_seed_urls(base_url: str) -> list:
-    """生成首页及各大藏文分类的探测入口。"""
+    """仅生成真实存在的首页与目标藏文分类入口。"""
     seeds = [base_url]
     for cat in TIBETAN_CATEGORIES:
-        seeds.extend([
-            urljoin(base_url, f"/{cat}/"),
-            urljoin(base_url, f"/{cat}།/"),
-            urljoin(base_url, f"/category/{cat}/"),
-            urljoin(base_url, f"/category/{cat}།/"),
-        ])
+        seeds.append(urljoin(base_url, f"/{cat}/"))
     return seeds
 
 
@@ -147,12 +166,10 @@ def discover_links(base_url: str, max_links: int = 100) -> list:
 
         for a in soup.find_all("a", href=True):
             href = a["href"].strip()
-            if not href or href.startswith(("javascript:", "mailto:", "tel:")):
+            if not href or href.startswith(("javascript:", "mailto:", "tel:", "#")):
                 continue
 
-            # 去除 #fragment 锚点
             full_url, _ = urldefrag(urljoin(base_url, href))
-
             if not is_same_domain(full_url, base_url):
                 continue
 
@@ -170,7 +187,7 @@ def discover_links(base_url: str, max_links: int = 100) -> list:
 
 
 def extract_metadata_from_ld_json(soup) -> dict:
-    """解析 ld+json 结构化数据。"""
+    """解析文章标准 ld+json 结构化数据。"""
     meta = {}
     for script in soup.find_all("script", type="application/ld+json"):
         if not script.string:
@@ -191,7 +208,11 @@ def extract_metadata_from_ld_json(soup) -> dict:
                         meta["author"] = author_data.get("name", "")
                     elif isinstance(author_data, list) and author_data:
                         first_author = author_data[0]
-                        meta["author"] = first_author.get("name", "") if isinstance(first_author, dict) else str(first_author)
+                        meta["author"] = (
+                            first_author.get("name", "")
+                            if isinstance(first_author, dict)
+                            else str(first_author)
+                        )
                     return meta
         except Exception:
             continue
@@ -223,46 +244,25 @@ def crawl_site(site_key: str, max_articles: int = 50) -> int:
             soup = parse_soup(html)
             ld_meta = extract_metadata_from_ld_json(soup)
 
-            # ---------- 1. 标题 ----------
-            title = ld_meta.get("title") or ""
-            if not title:
-                h1 = soup.find("h1")
-                if h1:
-                    title = h1.get_text(strip=True)
-            if not title:
-                og_title = soup.find("meta", property="og:title")
-                if og_title:
-                    title = og_title.get("content", "").strip()
-            if not title:
-                title_el = soup.find("title")
-                if title_el:
-                    title = title_el.get_text(strip=True)
+            # ---------- 1. 标题提取与清洗 ----------
+            h1 = soup.find("h1")
+            og = soup.find("meta", property="og:title")
+            title = (
+                ld_meta.get("title")
+                or (h1.get_text(strip=True) if h1 else "")
+                or (og.get("content", "").strip() if og else "")
+                or (soup.title.get_text(strip=True) if soup.title else "")
+            )
 
-            # 去除网站通用后缀
-            for sep in (" - ", " | ", " — "):
+            # 去除网站后缀（兼顾藏文标点与中英文横杠）
+            for sep in ("། །", " ། ", " - ", " | "):
                 if sep in title:
                     parts = title.split(sep)
                     if len(parts) >= 2:
                         title = sep.join(parts[:-1]).strip()
 
-            # ---------- 2. 时间 ----------
-            published = ld_meta.get("published") or ""
-            if not published:
-                for prop in ("article:published_time", "og:published_time", "publishdate", "pubdate"):
-                    meta = soup.find("meta", property=prop) or soup.find("meta", attrs={"name": prop})
-                    if meta and meta.get("content"):
-                        published = meta.get("content").strip()
-                        break
-            if not published:
-                time_el = soup.find("time")
-                if time_el:
-                    published = time_el.get("datetime") or time_el.get_text(strip=True)
-            if not published:
-                date_el = soup.find(attrs={"class": re.compile(r"date|time|published|post-date", re.I)})
-                if date_el:
-                    published = date_el.get("datetime") or date_el.get_text(strip=True)
-
-            published = normalize_tibetan_digits(published)
+            # ---------- 2. 优先通过 class 体系提取时间 ----------
+            published = extract_published_date(soup, ld_meta)
 
             # ---------- 3. 作者 ----------
             author = ld_meta.get("author") or ""
@@ -271,7 +271,7 @@ def crawl_site(site_key: str, max_articles: int = 50) -> int:
                 if author_el:
                     author = author_el.get_text(strip=True)
 
-            # ---------- 4. 正文 ----------
+            # ---------- 4. 正文提取 ----------
             content = extract_text(soup, selectors)
             if not content or len(content) < 50:
                 print(f"[{site_key}] Skip (content too short): {url}")
