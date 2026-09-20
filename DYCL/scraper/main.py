@@ -27,7 +27,7 @@ STRATEGY_MAP = {
 }
 
 
-def run(site_keys=None, max_articles=50):
+def run(site_keys=None, max_articles=150):
     init_db()
     if not site_keys:
         site_keys = list(SITES.keys())
@@ -55,6 +55,6 @@ def run(site_keys=None, max_articles=50):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Scrape Tibetan exile media websites")
     parser.add_argument("--sites", nargs="*", default=None, help="Site keys to crawl (default: all)")
-    parser.add_argument("--max", type=int, default=50, help="Max articles per site (default: 50)")
+    parser.add_argument("--max", type=int, default=150, help="Max articles per site (default: 50)")
     args = parser.parse_args()
     run(site_keys=args.sites, max_articles=args.max)
