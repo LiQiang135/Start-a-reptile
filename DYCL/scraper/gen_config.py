@@ -38,6 +38,8 @@ S = [
     ("tibetgeneva","The Tibet Bureau Geneva","https://www.tibetoffice.ch/","rss",2.0,"https://www.tibetoffice.ch/feed",None),
     ("tibetsun","Tibet Sun","https://www.tibetsun.com/","wayback", 3.0, None,None),
     ("shambalanews","Shambala News","http://www.shambalanews.com/","html_bo",3.0,None,None),
+    ("voachinese","Voice of America Chinese","https://www.voachinese.com","html",3.0,None,None),
+    ("tibettimes","Tibet Times","https://tibettimes.net","rss",2.0,"https://tibettimes.net/category/news/feed/",[".jeg_inner_content",".entry-content"]),
 ]
 
 # 为不同策略配置默认的 content_selectors

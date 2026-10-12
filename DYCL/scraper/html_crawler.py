@@ -7,6 +7,7 @@ from config import SITES
 
 # Common link patterns for article links
 ARTICLE_PATTERNS = [
+    re.compile(r"/s?k=西藏/",re.I),
     re.compile(r"/latest/", re.I),          # Free Tibet 主要路径
     re.compile(r"/article/", re.I),
     re.compile(r"/news/", re.I),
@@ -54,6 +55,7 @@ def discover_links(base_url, max_links=100):
         "/news.html",
         "/index.php/news",
         "/index.php/articles",
+        "/z/7759",
     ]:
         urls_to_check.append(urljoin(base_url, path))
 
@@ -147,6 +149,8 @@ def crawl_site(site_key, max_articles=50):
                 date_el = soup.find(attrs={"class": re.compile(r"date|time|published|post-date", re.I)})
                 if date_el is not None:
                     published = date_el.get("datetime") or date_el.get_text(strip=True)
+                if len(published)>100:
+                    continue;
 
             # ---------- 作者 ----------
             author = ""

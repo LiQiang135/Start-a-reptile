@@ -13,10 +13,12 @@
   - base.py：基类，封装HTTP请求、编码检测、去噪提取、SQLite存储、去重
   - rss_crawler.py：RSS策略爬虫
   - html_crawler.py：HTML直接解析爬虫
+  - html_crawler_bo.py：HTML解析爬虫，针对藏语网站
   - wayback_crawler.py：Wayback Machine存档爬虫（最大文件，344行）
   - playwright_crawler.py：Playwright动态渲染爬虫
   - export_data.py：导出工具，含简单语言检测
-  - check_tibetan_urls.py、gen_config.py：辅助小工具
+  - check_tibetan_urls.py
+  - gen_config.py：生成config.py文件
   - data\：数据存储
     - articles.db：SQLite数据库（当前共76篇文章）
     - 各站点子目录：每篇文章一个JSON，按url哈希命名
