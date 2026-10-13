@@ -37,9 +37,13 @@ S = [
     ("tibetinf_au","Tibetan Information Office,Australia","http://tibetoffice.com.au/","rss",2.0,"http://tibetoffice.com.au/feed",None),
     ("tibetgeneva","The Tibet Bureau Geneva","https://www.tibetoffice.ch/","rss",2.0,"https://www.tibetoffice.ch/feed",None),
     ("tibetsun","Tibet Sun","https://www.tibetsun.com/","wayback", 3.0, None,None),
-    ("shambalanews","Shambala News","http://www.shambalanews.com/","html_bo",3.0,None,None),
-    ("voachinese","Voice of America Chinese","https://www.voachinese.com","html",3.0,None,None),
+    ("shambalanews","Shambala News","http://www.shambalanews.com/","html_bo",2.0,None,None),
+    ("voachinese","Voice of America Chinese","https://www.voachinese.com","html",2.0,None,None),
     ("tibettimes","Tibet Times","https://tibettimes.net","rss",2.0,"https://tibettimes.net/category/news/feed/",[".jeg_inner_content",".entry-content"]),
+    ("rfa_mandarin","Radio Free Asia","https://www.rfa.org/mandarin","rss",2.0,"https://www.rfa.org/arc/outboundfeeds/mandarin/rss/",None),
+    ("usa_state","US State Department","https://www.state.gov/press-releases/","playwright",3.0,None,None),
+    ("rfi","France Radio and Television International","https://www.rfi.fr/cn/","playwright",3.0,None,[".t-content__body"]),
+    ("afp","Agence France-Presse","https://www.afp.com/en/homepage","html",2.0,None,[".afp-story-page__body"]),
 ]
 
 # 为不同策略配置默认的 content_selectors

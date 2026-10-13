@@ -1,49 +1,65 @@
-# DYCL-多语言处理项目接手指南
+# DYCL 多语言新闻采集项目
 
-## 一、项目是什么
+> 状态核对日期：2026-10-12。依据本地代码、SQLite、逐篇 JSON 和已有导出文件；未重新执行联网爬取。
 
-一个多语言新闻网站爬虫系统（Python），从约10个藏语/中文/英文新闻网站抓取文章，做语言检测、编码检查、质量验证后导出JSON/CSV。根目录的“需要爬取的网站.txt”列出了需求方给的33个目标网站（第一批），目前系统只覆盖了其中一部分。
+DYCL 使用 Python 采集新闻文章，支持 RSS、HTML、Wayback、Playwright 和藏文路径 CMS（`html_bo`）共 5 种策略。导出时清理正文，并按藏文、中文、英文和其他语言分组。
 
-## 二、目录结构
+## 当前状态
 
-- docs\ —— 已生成的项目文档（架构、配置、模块、数据四份说明）
-- scraper\ —— 核心代码（Python爬虫）
-  - main.py：调度入口，支持命令行参数 --sites / --max
-  - config.py：站点配置（注意：文件末尾不完整，见下方注意事项）
-  - base.py：基类，封装HTTP请求、编码检测、去噪提取、SQLite存储、去重
-  - rss_crawler.py：RSS策略爬虫
-  - html_crawler.py：HTML直接解析爬虫
-  - html_crawler_bo.py：HTML解析爬虫，针对藏语网站
-  - wayback_crawler.py：Wayback Machine存档爬虫（最大文件，344行）
-  - playwright_crawler.py：Playwright动态渲染爬虫
-  - export_data.py：导出工具，含简单语言检测
-  - check_tibetan_urls.py
-  - gen_config.py：生成config.py文件
-  - data\：数据存储
-    - articles.db：SQLite数据库（当前共76篇文章）
-    - 各站点子目录：每篇文章一个JSON，按url哈希命名
-    - export\：按语言分目录导出（tibetan/chinese/english/other）
-- gen_docs.py、gen_report.py：自动生成docs和项目报告的脚本
-- 其他\：合同模板、设备登记表等行政文档
-- 需要爬取的网站.txt：目标网站清单（需求输入）
-- 1.DYCL-多语言处理.zip：项目打包副本
+| 项目 | 当前结果 |
+| --- | --- |
+| 站点配置条目 | 33 个：RSS 20、HTML 4、Wayback 6、Playwright 2、html_bo 1 |
+| 数据库 | 737 篇，涉及 26 个站点键 |
+| 逐篇 JSON | 832 份，涉及 29 个站点目录 |
+| 已有导出 | 735 篇：藏文 341、英文 316、中文 28、其他 50 |
+| 数据差异 | 95 份 JSON 未进入数据库；2 篇数据库空正文记录被导出过滤 |
 
-## 三、核心设计
+配置条目包括语言版本和同站别名，不能当作 33 个独立网站或全部已验证可用。需求清单也包含重复地址，详细配置及采集覆盖见 [站点配置](docs/02-config.md)，数据核对见 [数据说明](docs/04-data.md)。
 
-1. 四种爬取策略：config.py里每个站点用strategy字段指定，main.py的STRATEGY_MAP负责分发。rss是解析feed获取文章列表再抓全文；html是直接解析列表页和详情页；wayback是通过web.archive.org抓已下线或被墙的站点；playwright是渲染JS后再抓。
+## 目录结构
 
-2. 数据流：config.py到main.py到策略爬虫再到base.py统一存储。每篇文章存入SQLite的articles表（字段包括site、url、url_hash、title、author、published、scraped_at、content、raw_html、summary），用url的sha256前16位去重；同时写一份JSON到data目录下对应站点文件夹。
+```text
+DYCL/
+├── README.md
+├── 需要爬取的网站.txt       # 第一批需求与后续站点，含重复地址
+├── docs/                    # 架构、配置、模块、数据说明
+├── gen_docs.py              # 旧文档生成器，含过时描述
+├── gen_report.py            # 旧报告生成器，含固定日期/旧数量
+└── scraper/
+    ├── main.py              # 调度入口：--sites / --max
+    ├── config.py            # 当前 33 个配置条目
+    ├── gen_config.py        # 配置生成源
+    ├── base.py              # 请求、编码、提取、存储、去重函数
+    ├── rss_crawler.py
+    ├── html_crawler.py
+    ├── html_crawler_bo.py
+    ├── wayback_crawler.py
+    ├── playwright_crawler.py
+    ├── export_data.py
+    ├── lang_probe.py
+    ├── check_tibetan_urls.py # 地址清单，尚无实际检查逻辑
+    ├── requirements.txt
+    ├── tmp/                 # 临时探测/验证脚本及页面样本
+    └── data/                # articles.db、站点 JSON、export/
+```
 
-3. base.py亮点：
-- 编码检测优先级是HTTP头charset、HTML meta、apparent_encoding、utf-8依次回退，并修复了chardet把UTF-8误判为ISO-8859-1的常见问题
+完整模块说明见 [模块清单](docs/03-modules.md)。
 
-- 内容提取有去噪逻辑，剔除导航、侧栏、广告、评论等噪音元素，多CSS选择器回退，最终回退到收集所有p标签
+## 安装与运行
 
-- 代理地址硬编码为 http://127.0.0.1:7897（Clash），用于访问被墙的web.archive.org，换机器必须改这里
-4. export_data.py：按Unicode字符范围统计做语言分类，藏文字符超过50判为tibetan，汉字超过50判为chinese，字母超过200判为english，其余为other。导出总表加按语言分目录的JSON和CSV，CSV用utf-8-sig编码方便Excel打开。
+使用 Python 3.10 或更高版本（代码包含 `dict | None` 等类型语法）。以下命令从 `DYCL` 目录执行：
 
-## 四、当前数据状态（实测）
+```powershell
+cd scraper
+python -m pip install -r requirements.txt
+python -m playwright install chromium
+python main.py 
+python export_data.py
+```
 
-- tibetpost 23篇、xizangzhiye 19篇、phayul 10篇、tibetnet 10篇、dalailamaworld 5篇、shambalanews 5篇、tibetanparliament 2篇、vot 2篇，合计76篇。
-- data\export下已有tibetan、chinese、english、other四个语言目录的导出文件。
-- 对比配置中每站上限500
+Chromium 用于 Playwright 策略。`python main.py` 会遍历全部配置；`--max` 实际默认值为 **150**，表示本次每站最多新增保存的篇数，并非数据库总量。命令行帮助仍写着默认 50，以代码实际值为准。候选链接和分页限制可能使实际保存数低于上限。
+
+请求函数和 Wayback API 使用硬编码代理 `http://127.0.0.1:7897`，运行前需确保该代理可用或调整代码。Playwright 未显式配置此代理。更多运行行为见 [架构说明](docs/01-architecture.md)。
+
+
+文档索引：[docs/README.md](docs/README.md)。

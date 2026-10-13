@@ -94,12 +94,43 @@ def discover_links(base_url, max_links=100):
     return list(discovered)[:max_links]
 
 
+def discover_afp_links(base_url, max_links=100):
+    """Discover public AFP news cards without scanning navigation/service links."""
+    soup = parse_soup(fetch_html(base_url))
+    links = []
+    seen = set()
+    for anchor in soup.select(".afp-homepage__news article.afp-story-card a[href]"):
+        url = urljoin(base_url, anchor["href"]).split("#", 1)[0].split("?", 1)[0]
+        parsed = urlparse(url)
+        if (parsed.scheme not in ("http", "https")
+                or parsed.netloc.lower() != urlparse(base_url).netloc.lower()
+                or not re.fullmatch(r"/en/[^/]+/?", parsed.path)):
+            continue
+        if url not in seen:
+            seen.add(url)
+            links.append(url)
+    return links[:max_links]
+
+
+def extract_afp_content(soup):
+    """Require AFP's article template; never extract a whole-page fallback."""
+    article = soup.select_one("article.afp-story-page")
+    kind = soup.find("meta", property="og:type")
+    if (article is None or article.find("h1") is None or kind is None
+            or kind.get("content", "").lower() != "article"):
+        return ""
+    body = article.select_one(".afp-story-page__body")
+    if body is None:
+        return ""
+    return extract_text(parse_soup(str(body)), [".afp-story-page__body"])
+
+
 def crawl_site(site_key, max_articles=50):
     cfg = SITES[site_key]
     base_url = cfg["base_url"]
     selectors = cfg.get("content_selectors", [])
     print(f"[{site_key}] Discovering article links from {base_url}")
-    links = discover_links(base_url)
+    links = discover_afp_links(base_url) if site_key == "afp" else discover_links(base_url)
     print(f"[{site_key}] Found {len(links)} candidate links")
     count = 0
     for url in links:
@@ -159,7 +190,7 @@ def crawl_site(site_key, max_articles=50):
                 author = author_el.get_text(strip=True)
 
             # ---------- 正文 ----------
-            content = extract_text(soup, selectors)
+            content = extract_afp_content(soup) if site_key == "afp" else extract_text(soup, selectors)
             if not content or len(content) < 50:
                 print(f"[{site_key}] Skip (content too short): {url}")
                 continue

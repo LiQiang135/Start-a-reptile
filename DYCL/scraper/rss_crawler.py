@@ -125,7 +125,7 @@ def _extract_from_html(html: str, selectors) -> str:
     return clean_wp_boilerplate(extract_text(soup, selectors))
 
 
-def crawl_site(site_key, max_articles=50, max_pages=10):
+def crawl_site(site_key, max_articles=50, max_pages=3):
     cfg = SITES[site_key]
     feed_url = cfg["feed_url"]
     selectors = cfg.get("content_selectors", [])
